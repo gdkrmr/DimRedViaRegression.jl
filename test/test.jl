@@ -1,46 +1,79 @@
 
-using RDatasets
+import StatsBase
+import StatsBase.fit
 import DimRedViaRegression
 import KernelRidgeRegression
 import MLKernels
-using Gallium
 using Plots
 pyplot()
 
-iris = dataset("datasets", "iris")
-x = convert(Matrix, iris[1:4])'
+n = 500
+tt = linspace(0, 4π, n)
+
+helix = hcat(
+    3 * cos(tt) + (randn(n) .* linspace(0.1, 1.4, n)),
+    3 * sin(tt) + (randn(n) .* linspace(0.1, 1.4, n)),
+    3 * tt      + (randn(n) .* linspace(0.1, 1.4, n)),
+)'
+
+scatter(helix[1,:], helix[2,:], helix[3,:])
+
+helix_drr = DimRedViaRegression.fit(DimRedViaRegression.DRR, helix,
+                KernelRidgeRegression.KRR, 3,
+                rotate = true, center = true, scale = false,
+                crossvalidate = 4,
+                regpars = (logspace(-5, 2, 8),
+                           [MLKernels.GaussianKernel(x)
+                            for x in logspace(-5, 2, 8)]))
+
+helix_drr_fit = DimRedViaRegression.predict(helix_drr, helix)
+scatter(helix_drr_fit[1,:], helix_drr_fit[2,:], helix_drr_fit[3,:])
+
+helix_recon = DimRedViaRegression.inverse(helix_drr, helix_drr_fit)
+scatter(helix_recon[1,:], helix_recon[2,:], helix_recon[3,:])
+helix_recon - helix
+
+helix_backbone = DimRedViaRegression.inverse(
+    helix_drr, hcat(helix_drr_fit[1, :],
+                    linspace(0, 0, n) ,
+                    linspace(0, 0, n))'
+)
+scatter(helix_backbone[1,:], helix_backbone[2,:], helix_backbone[3,:])
+
+helix_2d_recon = DimRedViaRegression.inverse(
+    helix_drr, hcat(helix_drr_fit[1:2, :]',
+                    linspace(0, 0, n))'
+)
+scatter(helix_2d_recon[1,:], helix_2d_recon[2,:], helix_2d_recon[3,:])
+
+reload("DimRedViaRegression")
+helix_rotated = deepcopy(helix)
+DimRedViaRegression.fit_and_pca!(DimRedViaRegression.DRR, helix_rotated,
+                                 KernelRidgeRegression.KRR, 3, scale = false)
+scatter(helix_rotated[1,:], helix_rotated[2,:], helix_rotated[3,:])
+
+helix_man_fit = deepcopy(helix_rotated)
+DimRedViaRegression.predict_no_rotate!(helix_drr, helix_man_fit)
+scatter(helix_man_fit[1,:], helix_man_fit[2,:], helix_man_fit[3,:])
 
 
-iris_drr = fit(DimRedViaRegression.DRR, x, KernelRidgeRegression.KRR, 4,
-               rotate = true, center = true, scale = true, crossvalidate = 10,
-               regpars = (logspace(-5, 2, 8),
-                          [MLKernels.GaussianKernel(x)
-                           for x in logspace(-5, 2, 8)]))
-y = predict(iris_drr, x)
-
-# show(y)
-
-# X = deepcopy(x)
-# T = eltype(X)
-# Y = rotation' * X
-
-# XX = deepcopy(X)
-# BLAS.gemm!('T', 'N', one(T), rotation, XX, one(T), XX)
-
-# Y - XX
-
-# DimRedViaRegression.fit_and_pca!(DimRedViaRegression.DRR, xx, KernelRidgeRegression.KRR, 4,
-#                                  rotate = true, center = true, scale = true, crossvalidate = 10,
-#                                  regpars = (logspace(-5, 2, 8),
-#                                             [MLKernels.GaussianKernel(x)
-#                                              for x in logspace(-5, 2, 8)]))
 
 
 
-scatter(x[1,:], x[2,:], group = iris[5])
-scatter(y[1,:], y[2,:], group = iris[5])
+X = helix
+T = eltype(X)
+d = size(X, 1)
+ndims = d
+regression = Type{KernelRidgeRegression.KRR}
+crossvalidate = 4
+regpars = (logspace(-5, 2, 8),
+           [MLKernels.GaussianKernel(x)
+            for x in logspace(-5, 2, 8)])
+regpars = (1e-5, MLKernels.GaussianKernel(1e-3))
+import DimRedViaRegression.crossvalidate_parameters
 
-using Gadfly
+scatter(X[1,:], X[2,:], X[3,:])
 
-Gadfly.plot(x = x[1,:], y = x[2,:], group = iris[5])
-Gadfly.plot(x = y[1,:], y = y[2,:], group = iris[5])
+MLKernels.kernelmatrix(MLKernels.ColumnMajor(),
+                        MLKernels.GaussianKernel(1.0),
+                        randn(3, 4), randn(3, 5))

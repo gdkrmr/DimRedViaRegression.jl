@@ -76,12 +76,12 @@ function fit{R <: StatsBase.RegressionModel}(
     regpars       ::Tuple = ()
 )
     XX = deepcopy(X)
-    drr = fit!(DRR, XX, regression, ndim,
-               rotate        = rotate,
-               center        = center,
-               scale         = scale,
-               crossvalidate = crossvalidate,
-               regpars       = regpars)
+    drr = fit_and_pca!(DRR, XX, regression, ndim,
+                       rotate        = rotate,
+                       center        = center,
+                       scale         = scale,
+                       crossvalidate = crossvalidate,
+                       regpars       = regpars)
     return drr
 end
 
@@ -127,18 +127,16 @@ function fit_and_pca!{T, R <: StatsBase.RegressionModel}(
 
     if center
         means = mean(X, 2)
-        # substract_means!(X, means)
         broadcast!(-, X, X, means)
     else
-        means = zeros(1, d)
+        means = zeros(T, d, 1)
     end
 
     if scale
         scales = std(X, 2)
-        # scale_vals!(X, scales)
         broadcast!(/, X, X, scales)
     else
-        scales = ones(T, d)
+        scales = ones(T, d, 1)
     end
 
     if rotate
@@ -151,10 +149,12 @@ function fit_and_pca!{T, R <: StatsBase.RegressionModel}(
         # SVD in julia is defined for row major order!!
         # eigenfact and svd give eigenvalues and vectors in different order!
         sv = svdfact(X, thin = false)
+
+        # TODO: check if this is really necessary:
         ord = sortperm(sv.S; rev = true)
         rotation = sv.U[:, ord]
 
-        X  = rotation' * X
+        X[:]  = rotation' * X
         # This one does not work unfortunately:
         # BLAS.gemm!('T', 'N', one(T), rotation, X, zero(T), X)
     else
@@ -163,13 +163,14 @@ function fit_and_pca!{T, R <: StatsBase.RegressionModel}(
 
     models = Vector{regression}(ndims - 1)
     for i in d:-1:2
-        if crossvalidate > 1
-            models[i - 1] = crossvalidate_parameters(
-                regression, X[1:d - 1, :], X[d, :], crossvalidate, regpars...
+        parsᵢ = if crossvalidate > 1
+            crossvalidate_parameters(
+                regression, X[1:i - 1, :], X[i, :], crossvalidate, regpars...
             )
         else
-            models[i - 1] = fit(regression, X[1:d - 1, :], X[d, :], regpars...)
+            regpars
         end
+        models[i - 1] = fit(regression, X[1:i - 1, :], X[i, :], parsᵢ...)
     end
     # X[1,:] stays the same
     DRR(rotation, means, scales, ndims, models)
@@ -181,33 +182,39 @@ function inverse!{T}(drr::DRR{T}, Y::Matrix{T})
 
     inverse_no_rotate!(drr, Y)
     # BLAS.gemm!('N', 'N', one(T), rotation, Y, zero(T), Y)
-    Y = drr.rotation * Y
-    # Y = Y .+ drr.means
-    broadcast!(+, Y, Y, drr.means)
+    Y[:] = drr.rotation * Y
+    # Y = Y .+ drr.centers
+    broadcast!(+, Y, Y, drr.centers)
     # Y = Y .* drr.scales
     broadcast!(*, Y, Y, drr.scales)
     return Y
 end
 
 function inverse{T}(drr::DRR{T}, Y::Matrix{T})
-    YY = deepcopy(T)
+    YY = deepcopy(Y)
     inverse!(drr, YY)
     return YY
 end
 
 function inverse_no_rotate!{T}(drr::DRR{T}, Y::Matrix{T})
     d, n = size(Y)
-    @assert d == drr.ndims
+    @assert d == length(drr.models) + 1
 
-    for i in d:-1:2
+    for i in 2:d
         # Y[d, :] += predict(drr.models[i - 1], Y[1:d - 1, :])
         # TODO: Make this inplace
-        prd = predict(drr.models[i - 1], Y[1:d - 1, :])
+        prd = predict(drr.models[i - 1], Y[1:i - 1, :])
         for j in 1:n
-            Y[d, j] += prd[j]
+            @inbounds Y[i, j] += prd[j]
         end
     end
     return Y
+end
+
+function predict{T}(drr::DRR{T}, X::Matrix{T})
+    XX = deepcopy(X)
+    predict!(drr, XX)
+    return XX
 end
 
 function predict!{T}(drr::DRR{T}, X::Matrix{T})
@@ -215,17 +222,11 @@ function predict!{T}(drr::DRR{T}, X::Matrix{T})
 
     broadcast!(-, X, X, drr.centers)
     broadcast!(/, X, X, drr.scales)
-    X = drr.rotation' * X
+    X[:] = drr.rotation' * X
     # BLAS.gemm!('N', 'N', one(T), drr.rotation, X, zero(T), X)
     predict_no_rotate!(drr, X)
 
     return X
-end
-
-function predict{T}(drr::DRR{T}, X::Matrix{T})
-    XX = deepcopy(X)
-    predict!(drr, XX)
-    return XX
 end
 
 function predict_no_rotate!{T}(drr::DRR{T}, X::Matrix{T})
@@ -235,14 +236,17 @@ function predict_no_rotate!{T}(drr::DRR{T}, X::Matrix{T})
     for i in d:-1:2
         # X[d, :] = X[d, :] - predict(drr.models[i - 1], X[1:d - 1, :])
         # TODO: make this inplace
-        prd = predict(drr.models[i - 1], X[1:d - 1, :])
+        prd = predict(drr.models[i - 1], X[1:i - 1, :])
         for j in 1:n
-            @inbounds X[d, j] = prd[j]
+            @inbounds X[i, j] -= prd[j]
         end
     end
     return X
 end
 
+"""
+requires methods for fit and predict for S, returns the parameter combination with least MSE
+"""
 function crossvalidate_parameters{T, S <: StatsBase.RegressionModel}(
     ::Type{S}, x::Matrix{T}, y::Vector{T}, folds::Int, pars...
 )
@@ -281,13 +285,12 @@ function crossvalidate_parameters{T, S <: StatsBase.RegressionModel}(
 
             m = fit(S, xₜᵣₐᵢₙ, yₜᵣₐᵢₙ, comb...)
             ŷ = predict(m, xₜₑₛₜ)
-            loss += mean((yₜₑₛₜ - ŷ) .^ 2)
+            loss += block_sizes[i] * sum((yₜₑₛₜ - ŷ) .^ 2)
         end
-        loss /= folds
+        loss /= n
 
         if loss < lossₘᵢₙ
             lossₘᵢₙ = loss
-            mₘᵢₙ    = m
             combₘᵢₙ = comb
         end
         print("\n")
@@ -296,7 +299,7 @@ function crossvalidate_parameters{T, S <: StatsBase.RegressionModel}(
     @message "Minimum:"
     @show combₘᵢₙ
     @show lossₘᵢₙ
-    return mₘᵢₙ
+    return combₘᵢₙ
 end
 
 function make_blocks(nobs, nblocks)
@@ -309,41 +312,23 @@ function make_blocks(nobs, nblocks)
     res
 end
 
-# TODO: Make the following functions nicer!
-# function add_means!{T <: AbstractFloat}(X::Matrix{T}, means::Vector{T})
-#     d, n = size(X)
-#     for j in 1:n
-#         for i in 1:d
-#             @inbounds X[i, j] += means[i]
-#         end
-#     end
-# end
+"""
+EXPERIMENTAL!!!!!
+calculates the Jacobian for point X, only one point supported!
+"""
+function jacobian{T <: StatsBase.RegressionModel}(model::T, X::Matrix, δ = 1e-5)
+    d = length(X)
+    J = Matrix{eltype(X)}(d, d)
+    Y = predict(model, X)
 
-# function substract_means!{T <: AbstractFloat}(X::Matrix{T}, means::Vector{T})
-#     d, n = size(X)
-#     for j in 1:n
-#         for i in 1:d
-#             @inbounds X[i, j] -= means[i]
-#         end
-#     end
-# end
+    for j in 1:d
+        δX = deepcopy(X)
+        δX[j] += δ
+        J[: , j] = (predict(model, δX) - Y) / δ
+    end
 
-# function unscale_vals!{T >: AbstractFloat}(X::Matrix{T}, scales::Vector{T})
-#     d, n = size(X)
-#     for j in 1:n
-#         for i in 1:d
-#             @inbounds XX[i, j] *= scales[i]
-#         end
-#     end
-# end
+    return J
+end
 
-# function scale_vals!{T >: AbstractFloat}(X::Matrix{T}, scales::Vector{T})
-#     d, n = size(X)
-#     for j in 1:n
-#         for i in 1:d
-#             @inbounds XX[i, j] /= scales[i]
-#         end
-#     end
-# end
 
 end # module DRR

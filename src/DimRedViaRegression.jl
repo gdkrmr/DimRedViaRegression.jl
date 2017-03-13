@@ -3,7 +3,7 @@ module DimRedViaRegression
 export fit, fit!, predict, inverse, inverse!, DRR
 
 import StatsBase
-import StatsBase: fit, predict, predict!
+import StatsBase: fit, fit!, predict, predict!
 import Iterators
 # There is no inverse function in StatsBase
 
@@ -42,7 +42,12 @@ function DRR{T <: AbstractFloat, S <: StatsBase.RegressionModel}(
     ndims    ::Int,
     models   ::Vector{S}
 )
-    DRR{T, S}(rotation, centers', scales', ndims, models)
+    DRR{T, S}(
+        rotation,
+        reshape(centers, (length(centers), 1)),
+        reshape(scales,  (length(scales),  1)),
+        ndims, models
+    )
 end
 
 function DRR{T <: AbstractFloat, S <: StatsBase.RegressionModel}(
@@ -64,7 +69,7 @@ for regpars = ([a, b], [c, d]) the combinations (a,c), (a,d), (b,c), (b,d) are t
 
 internally reg = fit(regression, X, y, (a, c)...) and predict(reg, Xnew) is called and these functions must be defined.
 """
-function fit{R <: StatsBase.RegressionModel}(
+function StatsBase.fit{R <: StatsBase.RegressionModel}(
                   ::Type{DRR},
     X             ::Matrix,
     regression    ::Type{R},
@@ -88,7 +93,7 @@ end
 """
 updates X with drr solution, returns the fitted DRR
 """
-function fit!{R <: StatsBase.RegressionModel}(
+function StatsBase.fit!{R <: StatsBase.RegressionModel}(
                   ::Type{DRR},
     X             ::Matrix,
     regression    ::Type{R},
@@ -211,13 +216,13 @@ function inverse_no_rotate!{T}(drr::DRR{T}, Y::Matrix{T})
     return Y
 end
 
-function predict{T}(drr::DRR{T}, X::Matrix{T})
+function StatsBase.predict{T}(drr::DRR{T}, X::Matrix{T})
     XX = deepcopy(X)
     predict!(drr, XX)
     return XX
 end
 
-function predict!{T}(drr::DRR{T}, X::Matrix{T})
+function StatsBase.predict!{T}(drr::DRR{T}, X::Matrix{T})
     d, n = size(X)
 
     broadcast!(-, X, X, drr.centers)

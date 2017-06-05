@@ -291,9 +291,12 @@ function crossvalidate_parameters{T, S <: StatsBase.RegressionModel}(
     block_ends   = cumsum(block_sizes)
     block_starts = [1, (block_ends[1:end-1] + 1)... ]
 
+    all_combs_broke = true
+
     for comb in combs
         loss = 0.0
         m = S
+        broke = false
         for i in 1:folds
             idxsₜₑₛₜ = falses(n)
             idxsₜₑₛₜ[block_starts[i]:block_ends[i]] = true
@@ -306,10 +309,21 @@ function crossvalidate_parameters{T, S <: StatsBase.RegressionModel}(
             xₜᵣₐᵢₙ = reshape(x₂[:, idxsₜᵣₐᵢₙ], (xdim1..., n - block_sizes[i]))
             yₜᵣₐᵢₙ = reshape(y₂[:, idxsₜᵣₐᵢₙ], (ydim1..., n - block_sizes[i]))
 
-            m = fit(S, xₜᵣₐᵢₙ, yₜᵣₐᵢₙ, comb...)
+            try
+                m = fit(S, xₜᵣₐᵢₙ, yₜᵣₐᵢₙ, comb...)
+            catch
+                broke = true
+                break
+            end
             ŷ = predict(m, xₜₑₛₜ)
             loss += block_sizes[i] * sum((yₜₑₛₜ - ŷ) .^ 2)
         end
+        # there is no break 2
+        broke && break
+
+        # at least one comb worked!
+        all_combs_broke = false
+
         loss /= n
 
         if loss < lossₘᵢₙ
@@ -323,6 +337,7 @@ function crossvalidate_parameters{T, S <: StatsBase.RegressionModel}(
             Loss: $loss
         """)
     end
+    all_combs_broke && error("could not fit model with any given parameter combination!")
     info("""
         Minimum Loss:
         Parameters: $combₘᵢₙ

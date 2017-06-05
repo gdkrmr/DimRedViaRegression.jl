@@ -277,6 +277,7 @@ function crossvalidate_parameters{T, S <: StatsBase.RegressionModel}(
 )
     info("Starting Crossvalidation")
     combs = Iterators.product(pars...)
+    all_combs_broke = true
 
     lossₘᵢₙ = typemax(T)
     mₘᵢₙ    = S
@@ -289,8 +290,6 @@ function crossvalidate_parameters{T, S <: StatsBase.RegressionModel}(
     block_sizes  = make_blocks(n, folds)
     block_ends   = cumsum(block_sizes)
     block_starts = [1, (block_ends[1:end-1] + 1)... ]
-
-    all_combs_broke = true
 
     for comb in combs
         loss = 0.0
@@ -321,7 +320,7 @@ function crossvalidate_parameters{T, S <: StatsBase.RegressionModel}(
         end
         # the current parameter combination did not work,
         # let's try the next one
-        broke && next
+        broke && continue
 
         # at least one comb worked!
         all_combs_broke = false

@@ -17,10 +17,8 @@ helix_drr = DimRedViaRegression.fit(DimRedViaRegression.DRR, helix,
                             for x in logspace(-5, 2, 8)]))
 helix_drr
 showcompact(helix_drr)
+display(helix_drr)
 
-(
-    code_lowered(x->x^2)[1].
-)
 
 import StatsBase
 import StatsBase.fit

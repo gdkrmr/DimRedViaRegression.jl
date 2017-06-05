@@ -170,14 +170,13 @@ function fit_and_pca!{T, R <: StatsBase.RegressionModel}(
 
     models = Vector{regression}(ndims - 1)
     for i in d:-1:2
-        parsᵢ = if crossvalidate > 1
+        models[i - 1] = if crossvalidate > 1
             crossvalidate_parameters(
                 regression, X[1:i - 1, :], X[i, :], crossvalidate, regpars...
             )
         else
-            regpars
+            fit(regression, X[1:i - 1, :], X[i, :], regpars...)
         end
-        models[i - 1] = fit(regression, X[1:i - 1, :], X[i, :], parsᵢ...)
     end
     # X[1,:] stays the same
     DRR(rotation, means, scales, ndims, models)
@@ -332,6 +331,7 @@ function crossvalidate_parameters{T, S <: StatsBase.RegressionModel}(
         if loss < lossₘᵢₙ
             lossₘᵢₙ = loss
             combₘᵢₙ = comb
+            mₘᵢₙ    = m
         end
 
         info("""
@@ -346,7 +346,7 @@ function crossvalidate_parameters{T, S <: StatsBase.RegressionModel}(
         Parameters: $combₘᵢₙ
         Loss: $lossₘᵢₙ
     """)
-    return combₘᵢₙ
+    return mₘᵢₙ
 end
 
 function make_blocks(nobs, nblocks)

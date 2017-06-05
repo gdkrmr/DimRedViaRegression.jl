@@ -2,9 +2,11 @@
 module DimRedViaRegression
 export fit, fit!, predict, inverse, inverse!, DRR
 
+import Base: show, showcompact, display
 import StatsBase
 import StatsBase: fit, fit!, predict, predict!
 import Iterators
+# import Logging: info, debug, warn, err, critical, @info, @debug, @warn, @err, @critical
 # There is no inverse function in StatsBase
 
 macro message(msg)
@@ -249,12 +251,33 @@ function predict_no_rotate!{T}(drr::DRR{T}, X::Matrix{T})
     return X
 end
 
+function showcompact(x::DRR)
+    println("""DRR, ndims: $(x.ndims)""")
+    show(typeof(x))
+end
+
+function show(x::DRR)
+    showcompact(x)
+    print("centers: ")
+    display(x.centers)
+    print("rotation: ")
+    display(x.rotation)
+    for i in x.models
+        display(i)
+    end
+end
+
+function display(x::DRR)
+    show(x)
+end
+
 """
 requires methods for fit and predict for S, returns the parameter combination with least MSE
 """
 function crossvalidate_parameters{T, S <: StatsBase.RegressionModel}(
     ::Type{S}, x::Matrix{T}, y::Vector{T}, folds::Int, pars...
 )
+    info("Starting Crossvalidation")
     combs = Iterators.product(pars...)
 
     lossₘᵢₙ = typemax(T)
@@ -270,13 +293,9 @@ function crossvalidate_parameters{T, S <: StatsBase.RegressionModel}(
     block_starts = [1, (block_ends[1:end-1] + 1)... ]
 
     for comb in combs
-        @message "Current:"
-        @show comb
-
         loss = 0.0
         m = S
         for i in 1:folds
-            print("$i ")
             idxsₜₑₛₜ = falses(n)
             idxsₜₑₛₜ[block_starts[i]:block_ends[i]] = true
             idxsₜᵣₐᵢₙ = ~idxsₜₑₛₜ
@@ -298,12 +317,18 @@ function crossvalidate_parameters{T, S <: StatsBase.RegressionModel}(
             lossₘᵢₙ = loss
             combₘᵢₙ = comb
         end
-        print("\n")
-        @show loss
+
+        info("""
+            Current:
+            Parameters: $comb
+            Loss: $loss
+        """)
     end
-    @message "Minimum:"
-    @show combₘᵢₙ
-    @show lossₘᵢₙ
+    info("""
+        Minimum Loss:
+        Parameters: $combₘᵢₙ
+        Loss: $lossₘᵢₙ
+    """)
     return combₘᵢₙ
 end
 

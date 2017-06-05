@@ -318,8 +318,9 @@ function crossvalidate_parameters{T, S <: StatsBase.RegressionModel}(
             ŷ = predict(m, xₜₑₛₜ)
             loss += block_sizes[i] * sum((yₜₑₛₜ - ŷ) .^ 2)
         end
-        # there is no break 2
-        broke && break
+        # the current parameter combination did not work,
+        # let's try the next one
+        broke && next
 
         # at least one comb worked!
         all_combs_broke = false

@@ -312,6 +312,8 @@ function crossvalidate_parameters{T, S <: StatsBase.RegressionModel}(
             try
                 m = fit(S, xₜᵣₐᵢₙ, yₜᵣₐᵢₙ, comb...)
             catch
+                warn("could not fix parameter combination")
+                show(comb)
                 broke = true
                 break
             end

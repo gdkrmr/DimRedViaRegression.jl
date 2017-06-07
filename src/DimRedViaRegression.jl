@@ -333,11 +333,11 @@ function crossvalidate_parameters{T, S <: StatsBase.RegressionModel}(
             mₘᵢₙ    = m
         end
 
-        info("""
-            Current:
-            Parameters: $comb
-            Loss: $loss
-        """)
+        # info("""
+        #     Current:
+        #     Parameters: $comb
+        #     Loss: $loss
+        # """)
     end
     all_combs_broke && error("could not fit model with any given parameter combination!")
     info("""

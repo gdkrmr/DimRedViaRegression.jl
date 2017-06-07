@@ -251,7 +251,7 @@ function predict_no_rotate!{T}(drr::DRR{T}, X::Matrix{T})
 end
 
 function showcompact(io::IO, x::DRR)
-    println(io, """DRR, ndims: $(x.ndims)""")
+    print(io, "DRR, ndims: $(x.ndims), ")
     show(io, typeof(x))
 end
 
@@ -263,7 +263,7 @@ function show(io::IO, x::DRR)
     Base.showarray(io, x.rotation, false)
     print(io, "\nmodels: ")
     for i in x.models
-        print("\n")
+        print(io, "\n")
         show(io, i)
     end
     print("\n")

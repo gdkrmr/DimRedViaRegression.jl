@@ -170,6 +170,7 @@ function fit_and_pca!{T, R <: StatsBase.RegressionModel}(
 
     models = Vector{regression}(ndims - 1)
     for i in d:-1:2
+        info("Fitting dimension $i")
         models[i - 1] = if crossvalidate > 1
             crossvalidate_parameters(
                 regression, X[1:i - 1, :], X[i, :], crossvalidate, regpars...
@@ -251,8 +252,8 @@ function predict_no_rotate!{T}(drr::DRR{T}, X::Matrix{T})
 end
 
 function showcompact(io::IO, x::DRR)
-    print(io, "DRR, ndims: $(x.ndims), ")
-    show(io, typeof(x))
+    print(io, typeof(x))
+    print(io, ", ndims: $(x.ndims)")
 end
 
 function show(io::IO, x::DRR)

@@ -341,11 +341,11 @@ function crossvalidate_parameters{T, S <: StatsBase.RegressionModel}(
         # """)
     end
     all_combs_broke && error("could not fit model with any given parameter combination!")
-    info("""
-        Minimum Loss:
-        Parameters: $combₘᵢₙ
-        Loss: $lossₘᵢₙ
-    """)
+    # info("""
+    #     Minimum Loss:
+    #     Parameters: $combₘᵢₙ
+    #     Loss: $lossₘᵢₙ
+    # """)
     return mₘᵢₙ
 end
 

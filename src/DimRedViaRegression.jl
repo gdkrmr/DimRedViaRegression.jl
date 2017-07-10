@@ -311,10 +311,16 @@ function crossvalidate_parameters{T, S <: StatsBase.RegressionModel}(
             try
                 m = fit(S, xₜᵣₐᵢₙ, yₜᵣₐᵢₙ, comb...)
             catch e
-                warn("could not fit parameter combination:")
-                show(comb)
-                println("The error:")
-                println(e)
+                # Distinguish between linear algebra errors, which are probably
+                # caused by the current parameter combination and other errors
+                # which should make everything fail immediately.
+                if typeof(e) <: typeof(LinAlg.PosDefException(1))
+                    warn("could not fit parameter combination:")
+                    show(comb)
+                else
+                    rethrow(e)
+                end
+
                 broke = true
                 break
             end

@@ -310,9 +310,11 @@ function crossvalidate_parameters{T, S <: StatsBase.RegressionModel}(
 
             try
                 m = fit(S, xₜᵣₐᵢₙ, yₜᵣₐᵢₙ, comb...)
-            catch
-                warn("could not fit parameter combination")
+            catch e
+                warn("could not fit parameter combination:")
                 show(comb)
+                println("The error:")
+                println(e)
                 broke = true
                 break
             end

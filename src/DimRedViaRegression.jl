@@ -155,7 +155,7 @@ function fit_and_pca!{T, R <: StatsBase.RegressionModel}(
         # Aᵀ = VΣᵀUᵀ
         # SVD in julia is defined for row major order!!
         # eigenfact and svd give eigenvalues and vectors in different order!
-        sv = svdfact(X, thin = false)
+        sv = svdfact(X, thin = true)
 
         # TODO: check if this is really necessary:
         ord = sortperm(sv.S; rev = true)
